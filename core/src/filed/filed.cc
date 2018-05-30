@@ -37,7 +37,7 @@
 #include "lib/bsignal.h"
 
 /* Imported Functions */
-extern void *handle_connection_request(void *dir_sock);
+extern void *HandleConnectionRequest(void *dir_sock);
 extern bool ParseFdConfig(ConfigurationParser *config, const char *configfile, int exit_code);
 extern void PrintMessage(void *sock, const char *fmt, ...);
 

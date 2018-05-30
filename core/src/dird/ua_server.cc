@@ -38,6 +38,7 @@
 #include "dird/ua_output.h"
 #include "dird/ua_server.h"
 #include "lib/bnet.h"
+#include "lib/pam_handler.h"
 
 /* Imported variables */
 
@@ -75,7 +76,7 @@ JobControlRecord *new_control_jcr(const char *base_name, int job_type)
 /**
  * Handle Director User Agent commands
  */
-void *handle_UA_client_request(BareosSocket *user)
+void *HandleUserAgentClientRequest(BareosSocket *user_agent_socket)
 {
    int status;
    UaContext *ua;
@@ -86,19 +87,24 @@ void *handle_UA_client_request(BareosSocket *user)
    jcr = new_control_jcr("-Console-", JT_CONSOLE);
 
    ua = new_ua_context(jcr);
-   ua->UA_sock = user;
+   ua->UA_sock = user_agent_socket;
    SetJcrInTsd(INVALID_JCR);
 
    if (!AuthenticateUserAgent(ua)) {
       goto getout;
    }
 
+   if (!pam_authenticate_useragent("user", "passwocht")) {
+      goto getout;
+   }
+
+
    while (!ua->quit) {
       if (ua->api) {
-         user->signal(BNET_MAIN_PROMPT);
+         user_agent_socket->signal(BNET_MAIN_PROMPT);
       }
 
-      status = user->recv();
+      status = user_agent_socket->recv();
       if (status >= 0) {
          PmStrcpy(ua->cmd, ua->UA_sock->msg);
          ParseUaArgs(ua);
@@ -114,7 +120,7 @@ void *handle_UA_client_request(BareosSocket *user)
                   ua->user_notified_msg_pending = false;
                } else if (!ua->gui && !ua->user_notified_msg_pending && console_msg_pending) {
                   if (ua->api) {
-                     user->signal(BNET_MSGS_PENDING);
+                     user_agent_socket->signal(BNET_MSGS_PENDING);
                   } else {
                      bsendmsg(ua, _("You have messages.\n"));
                   }
@@ -122,13 +128,13 @@ void *handle_UA_client_request(BareosSocket *user)
                }
             }
             if (!ua->api) {
-               user->signal(BNET_EOD); /* send end of command */
+               user_agent_socket->signal(BNET_EOD); /* send end of command */
             }
          }
-      } else if (IsBnetStop(user)) {
+      } else if (IsBnetStop(user_agent_socket)) {
          ua->quit = true;
       } else { /* signal */
-         user->signal(BNET_POLL);
+         user_agent_socket->signal(BNET_POLL);
       }
    }
 
@@ -136,8 +142,8 @@ getout:
    CloseDb(ua);
    FreeUaContext(ua);
    FreeJcr(jcr);
-   user->close();
-   delete user;
+   user_agent_socket->close();
+   delete user_agent_socket;
 
    return NULL;
 }
